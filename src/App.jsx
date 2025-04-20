@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
 
 function App() {
   const [word, setWord] = useState('');
   const [data, setData] = useState([]);
-  const [error, setError] = useState(false); // New state to track error
+  const [error, setError] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   const commonDefinitions = [
     { name: 'Abundant', definition: 'Present in large quantities' },
@@ -15,7 +18,10 @@ function App() {
   ];
 
   const getWordMeaning = async () => {
-    setError(false); // Reset error state before each new search
+    if (!word.trim()) return;
+    
+    setError(false);
+    setIsLoading(true);
     try {
       const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
       if (!response.ok) {
@@ -25,7 +31,9 @@ function App() {
       setData(result);
     } catch (error) {
       console.error('Error fetching data:', error);
-      setError(true); // Set error state if an error occurs
+      setError(true);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -34,67 +42,93 @@ function App() {
   };
 
   const handlePlayAudio = (audioUrl) => {
+    if (!audioUrl) return;
     const audio = new Audio(audioUrl);
-    audio.play();
+    audio.play().catch(e => console.error('Error playing audio:', e));
   };
 
-  // States for carousel navigation
-  const [currentIndex, setCurrentIndex] = useState(0);
-
   const goToNext = () => {
-    if (currentIndex < commonDefinitions.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-    } else {
-      setCurrentIndex(0); // Loop back to first
-    }
+    setCurrentIndex((prevIndex) => 
+      prevIndex === commonDefinitions.length - 1 ? 0 : prevIndex + 1
+    );
   };
 
   const goToPrevious = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
-    } else {
-      setCurrentIndex(commonDefinitions.length - 1); // Loop to last
-    }
+    setCurrentIndex((prevIndex) => 
+      prevIndex === 0 ? commonDefinitions.length - 1 : prevIndex - 1
+    );
   };
 
   const goToIndex = (index) => {
     setCurrentIndex(index);
   };
 
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+  };
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+  }, [isDarkMode]);
+
   return (
     <div className="container">
       <h1>📚 Dictionary App</h1>
+      
       <div className="input-section">
-        <input type="text" value={word} onChange={handleChange} placeholder="Enter a word..." />
-        <button onClick={getWordMeaning}>Get Definition</button>
+        <input 
+          type="text" 
+          value={word} 
+          onChange={handleChange} 
+          placeholder="Enter a word..."
+          onKeyDown={(e) => e.key === 'Enter' && getWordMeaning()}
+        />
+        <button onClick={getWordMeaning} disabled={isLoading}>
+          {isLoading ? 'Searching...' : 'Get Definition'}
+        </button>
       </div>
 
+      <button onClick={toggleDarkMode} className="toggle-mode">
+        Switch to {isDarkMode ? 'Light' : 'Dark'} Mode
+      </button>
+
+      {isLoading && (
+        <div className="loading-indicator">
+          <p>Loading...</p>
+        </div>
+      )}
+
       {error ? (
-        // Show error card when error state is true
         <div className="error-card">
-          <h2>🚫 Error: Word not found</h2>
+          <h2>🚫 Word not found</h2>
           <p>We couldn't find a definition for "{word}". Please try another word.</p>
         </div>
       ) : data.length > 0 ? (
         <div className="results">
           <h2>{data[0].word}</h2>
-
-          {data[0].phonetics.map((p, index) => (
-            p.audio && (
-              <div key={index}>
-                <button onClick={() => handlePlayAudio(p.audio)}>🔊 Listen </button>
-              </div>
-            )
+          {data[0].phonetics.filter(p => p.audio).map((p, index) => (
+            <div key={index}>
+              <button onClick={() => handlePlayAudio(p.audio)}>
+                🔊 { index == 0? "Male":"Female"}
+              </button>
+            </div>
           ))}
-
           {data[0].meanings.map((meaning, i) => (
             <div className="meaning" key={i}>
               <h3>{meaning.partOfSpeech}</h3>
               <ul>
-                {meaning.definitions.map((def, j) => (
+                {meaning.definitions.slice(0, 5).map((def, j) => (
                   <li key={j}>
                     <strong>Definition:</strong> {def.definition}
-                    {def.example && <div><em>Example:</em> "{def.example}"</div>}
+                    {def.example && (
+                      <div className="example">
+                        <em>Example:</em> "{def.example}"
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -102,24 +136,17 @@ function App() {
           ))}
         </div>
       ) : (
-        <div className="card-carousel">
-          <div className="card">
-            <h3>{commonDefinitions[currentIndex].name}</h3>
-            <p>{commonDefinitions[currentIndex].definition}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Show carousel controls and dot indicators only if data.length is 0 */}
-      {data.length === 0 && !error && (
         <>
-          {/* Carousel Controls */}
+          <div className="card-carousel">
+            <div className="card">
+              <h3>{commonDefinitions[currentIndex].name}</h3>
+              <p>{commonDefinitions[currentIndex].definition}</p>
+            </div>
+          </div>
           <div className="carousel-controls">
             <button onClick={goToPrevious}>❮ Prev</button>
             <button onClick={goToNext}>Next ❯</button>
           </div>
-
-          {/* Dot Indicators */}
           <div className="dot-indicators">
             {commonDefinitions.map((_, index) => (
               <span
