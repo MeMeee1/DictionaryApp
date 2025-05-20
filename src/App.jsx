@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import './App.css';
+import { counterStore } from './counterStore';
 
 function App() {
   const [word, setWord] = useState('');
@@ -8,6 +9,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [count, setCount] = useState(counterStore.getState().count);
 
   const commonDefinitions = [
     { name: 'Abundant', definition: 'Present in large quantities' },
@@ -17,9 +19,16 @@ function App() {
     { name: 'Eloquent', definition: 'Fluent or persuasive in speaking or writing' },
   ];
 
+  useEffect(() => {
+    const unsubscribe = counterStore.subscribe(() => {
+      setCount(counterStore.getState().count);
+    });
+    return () => unsubscribe();
+  }, []);
+
   const getWordMeaning = async () => {
     if (!word.trim()) return;
-    
+
     setError(false);
     setIsLoading(true);
     try {
@@ -48,13 +57,13 @@ function App() {
   };
 
   const goToNext = () => {
-    setCurrentIndex((prevIndex) => 
+    setCurrentIndex((prevIndex) =>
       prevIndex === commonDefinitions.length - 1 ? 0 : prevIndex + 1
     );
   };
 
   const goToPrevious = () => {
-    setCurrentIndex((prevIndex) => 
+    setCurrentIndex((prevIndex) =>
       prevIndex === 0 ? commonDefinitions.length - 1 : prevIndex - 1
     );
   };
@@ -78,12 +87,12 @@ function App() {
   return (
     <div className="container">
       <h1>📚 Dictionary App</h1>
-      
+
       <div className="input-section">
-        <input 
-          type="text" 
-          value={word} 
-          onChange={handleChange} 
+        <input
+          type="text"
+          value={word}
+          onChange={handleChange}
           placeholder="Enter a word..."
           onKeyDown={(e) => e.key === 'Enter' && getWordMeaning()}
         />
@@ -95,6 +104,12 @@ function App() {
       <button onClick={toggleDarkMode} className="toggle-mode">
         Switch to {isDarkMode ? 'Light' : 'Dark'} Mode
       </button>
+
+      <div className="counter-section">
+        <h2>🧮 Counter: {count}</h2>
+        <button onClick={() => counterStore.dispatch({ type: 'INCREMENT' })}>➕</button>
+        <button onClick={() => counterStore.dispatch({ type: 'DECREMENT' })}>➖</button>
+      </div>
 
       {isLoading && (
         <div className="loading-indicator">
@@ -113,7 +128,7 @@ function App() {
           {data[0].phonetics.filter(p => p.audio).map((p, index) => (
             <div key={index}>
               <button onClick={() => handlePlayAudio(p.audio)}>
-                🔊 { index == 0? "Male":"Female"}
+                🔊 {index === 0 ? "Male" : "Female"}
               </button>
             </div>
           ))}
