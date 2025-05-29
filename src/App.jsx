@@ -1,15 +1,12 @@
+// App.jsx
 import { useState, useEffect } from 'react';
 import './App.css';
-import { counterStore } from './counterStore';
+import { dictionaryStore } from './dictionaryStore';
 
-function App() {
-  const [word, setWord] = useState('');
-  const [data, setData] = useState([]);
-  const [error, setError] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+const App = () => {
+  const [state, setState] = useState(dictionaryStore.getState());
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [count, setCount] = useState(counterStore.getState().count);
 
   const commonDefinitions = [
     { name: 'Abundant', definition: 'Present in large quantities' },
@@ -20,69 +17,56 @@ function App() {
   ];
 
   useEffect(() => {
-    const unsubscribe = counterStore.subscribe(() => {
-      setCount(counterStore.getState().count);
+    const unsubscribe = dictionaryStore.subscribe(() => {
+      setState(dictionaryStore.getState());
     });
     return () => unsubscribe();
   }, []);
 
-  const getWordMeaning = async () => {
-    if (!word.trim()) return;
+  const handleInputChange = (e) => {
+    dictionaryStore.dispatch({ type: 'SET_WORD', payload: e.target.value });
+  };
 
-    setError(false);
-    setIsLoading(true);
+  const fetchWordMeaning = async () => {
+    const word = state.word.trim();
+    if (!word) return;
+
+    dictionaryStore.dispatch({ type: 'SET_LOADING', payload: true });
+    dictionaryStore.dispatch({ type: 'SET_ERROR', payload: null });
+
     try {
       const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`);
-      if (!response.ok) {
-        throw new Error('Word not found');
-      }
+      if (!response.ok) throw new Error('Word not found');
       const result = await response.json();
-      setData(result);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      setError(true);
+      dictionaryStore.dispatch({ type: 'SET_RESULTS', payload: result });
+    } catch {
+      dictionaryStore.dispatch({ type: 'SET_ERROR', payload: 'Word not found' });
     } finally {
-      setIsLoading(false);
+      dictionaryStore.dispatch({ type: 'SET_LOADING', payload: false });
     }
   };
 
-  const handleChange = (event) => {
-    setWord(event.target.value);
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') fetchWordMeaning();
   };
 
-  const handlePlayAudio = (audioUrl) => {
-    if (!audioUrl) return;
-    const audio = new Audio(audioUrl);
-    audio.play().catch(e => console.error('Error playing audio:', e));
-  };
-
-  const goToNext = () => {
-    setCurrentIndex((prevIndex) =>
-      prevIndex === commonDefinitions.length - 1 ? 0 : prevIndex + 1
-    );
-  };
-
-  const goToPrevious = () => {
-    setCurrentIndex((prevIndex) =>
-      prevIndex === 0 ? commonDefinitions.length - 1 : prevIndex - 1
-    );
-  };
-
-  const goToIndex = (index) => {
-    setCurrentIndex(index);
+  const handlePlayAudio = (url) => {
+    if (!url) return;
+    const audio = new Audio(url);
+    audio.play().catch(err => console.error('Error playing audio:', err));
   };
 
   const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
+    setIsDarkMode(prev => !prev);
   };
 
   useEffect(() => {
-    if (isDarkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
+    document.body.classList.toggle('dark-mode', isDarkMode);
   }, [isDarkMode]);
+
+  const goToNext = () => setCurrentIndex(i => (i + 1) % commonDefinitions.length);
+  const goToPrevious = () => setCurrentIndex(i => (i - 1 + commonDefinitions.length) % commonDefinitions.length);
+  const goToIndex = (index) => setCurrentIndex(index);
 
   return (
     <div className="container">
@@ -91,13 +75,13 @@ function App() {
       <div className="input-section">
         <input
           type="text"
-          value={word}
-          onChange={handleChange}
+          value={state.word}
+          onChange={handleInputChange}
           placeholder="Enter a word..."
-          onKeyDown={(e) => e.key === 'Enter' && getWordMeaning()}
+          onKeyDown={handleKeyDown}
         />
-        <button onClick={getWordMeaning} disabled={isLoading}>
-          {isLoading ? 'Searching...' : 'Get Definition'}
+        <button onClick={fetchWordMeaning} disabled={state.isLoading}>
+          {state.isLoading ? 'Searching...' : 'Get Definition'}
         </button>
       </div>
 
@@ -105,34 +89,28 @@ function App() {
         Switch to {isDarkMode ? 'Light' : 'Dark'} Mode
       </button>
 
-      <div className="counter-section">
-        <h2>🧮 Counter: {count}</h2>
-        <button onClick={() => counterStore.dispatch({ type: 'INCREMENT' })}>➕</button>
-        <button onClick={() => counterStore.dispatch({ type: 'DECREMENT' })}>➖</button>
-      </div>
+      {state.isLoading && <p className="loading-indicator">Loading...</p>}
 
-      {isLoading && (
-        <div className="loading-indicator">
-          <p>Loading...</p>
-        </div>
-      )}
-
-      {error ? (
+      {state.error ? (
         <div className="error-card">
           <h2>🚫 Word not found</h2>
-          <p>We couldn't find a definition for "{word}". Please try another word.</p>
+          <p>We couldn't find a definition for "{state.word}". Please try another word.</p>
         </div>
-      ) : data.length > 0 ? (
+      ) : state.results.length > 0 ? (
         <div className="results">
-          <h2>{data[0].word}</h2>
-          {data[0].phonetics.filter(p => p.audio).map((p, index) => (
-            <div key={index}>
-              <button onClick={() => handlePlayAudio(p.audio)}>
-                🔊 {index === 0 ? "Male" : "Female"}
-              </button>
-            </div>
-          ))}
-          {data[0].meanings.map((meaning, i) => (
+          <h2>{state.results[0].word}</h2>
+
+          {state.results[0].phonetics
+            .filter(p => p.audio)
+            .map((p, i) => (
+              <div key={i}>
+                <button onClick={() => handlePlayAudio(p.audio)}>
+                  🔊 {i === 0 ? 'Male' : 'Female'}
+                </button>
+              </div>
+            ))}
+
+          {state.results[0].meanings.map((meaning, i) => (
             <div className="meaning" key={i}>
               <h3>{meaning.partOfSpeech}</h3>
               <ul>
@@ -158,15 +136,17 @@ function App() {
               <p>{commonDefinitions[currentIndex].definition}</p>
             </div>
           </div>
+
           <div className="carousel-controls">
             <button onClick={goToPrevious}>❮ Prev</button>
             <button onClick={goToNext}>Next ❯</button>
           </div>
+
           <div className="dot-indicators">
             {commonDefinitions.map((_, index) => (
               <span
                 key={index}
-                className={`dot ${currentIndex === index ? 'active' : ''}`}
+                className={`dot ${index === currentIndex ? 'active' : ''}`}
                 onClick={() => goToIndex(index)}
               />
             ))}
@@ -175,6 +155,6 @@ function App() {
       )}
     </div>
   );
-}
+};
 
 export default App;

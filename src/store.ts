@@ -1,3 +1,4 @@
+// store.ts
 type Action = { type: string } & Record<string, any>;
 type Reducer<S> = (state: S, action: Action) => S;
 
@@ -9,9 +10,9 @@ export function createStore<S>(initialState: S, reducer: Reducer<S>) {
     return state;
   }
 
-  function dispatch(action: Action) {
+  function dispatch(action: Action): void {
     state = reducer(state, action);
-    listeners.forEach((listener) => listener());
+    listeners.forEach(listener => listener());
   }
 
   function subscribe(listener: () => void): () => boolean {
